@@ -3,7 +3,6 @@ import time
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.exceptions import ValidationException
 from yandex_cloud_ml_sdk import YCloudML
 
 from schemas.request import PredictionRequest, PredictionResponse
@@ -84,7 +83,8 @@ async def predict(body: PredictionRequest):
                 await logger.error(f"LLM workflow failed for request {body.id}: {e}, retrying {i + 1}")
                 continue
             except ValueError as e:
-                await logger.error(f'LLM generated fake answer with invalid answer for request {body.id}: {e},  retrying {i + 1}')
+                await logger.error(
+                    f'LLM generated fake answer with invalid answer for request {body.id}: {e},  retrying {i + 1}')
         return answer
     except LLMWorkflowError as e:
         await logger.error(f"LLM workflow failed for request {body.id}: {e}")

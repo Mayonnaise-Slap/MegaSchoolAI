@@ -7,3 +7,7 @@ python-dotenv~=1.0.1
 yandex-cloud-ml-sdk
 beautifulsoup4~=4.12.3
 pydantic~=2.10.6
+httpx~=0.28.1
+requests~=2.32.3
+aiohttp~=3.11.11
+bs4~=0.0.2
