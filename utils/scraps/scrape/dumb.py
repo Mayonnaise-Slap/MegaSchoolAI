@@ -52,13 +52,27 @@ def extract_surrounding(source, indexes, bound=100):
 
 
 def bounds_based_parse(url, bound=100):
+    # FAIL
+    # too long, exceeds context window
     data = dumb_parse(url)
     indexes = merge_sorted_indexes(list(find_all(data, 'итмо')), list(find_all(data, 'itmo')))
     surrounding = extract_surrounding(data, indexes, bound)
     return surrounding
 
 
-if __name__ == '__main__':
-    print(bounds_based_parse(
-        "https://ru.wikipedia.org/wiki/%D0%A3%D0%BD%D0%B8%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%82%D0%B5%D1%82_%D0%98%D0%A2%D0%9C%D0%9E",
-        100))
+def summarize_text(url: str, sdk, context: str) -> str:
+    data = '\n'.join(bounds_based_parse(url))
+    summarizer = sdk.models.completions('yandexgpt-lite').configure(temperature=0.3, max_tokens=2000)
+    messages = [
+        {
+            "role": 'system',
+            'text': f'Сократи предложенный текст, учитывая, что мне нужно извлечь из него информацию для ответа на следующий вопрос:\n{context}'
+        }, {
+            "role": 'user',
+            "text": data[:min(8000, len(data))]
+        }
+    ]
+    if data:
+        text = summarizer.run(messages)[0].text
+        return text
+    return ''

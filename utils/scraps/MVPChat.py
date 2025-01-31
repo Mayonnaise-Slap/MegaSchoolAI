@@ -5,27 +5,27 @@ import os
 from dotenv import load_dotenv
 from yandex_cloud_ml_sdk import YCloudML
 
-from chat_history import chat_history
+# from chat_history import chat_history
 
 load_dotenv()
 
 api_key = os.getenv("YA_GPT_KEY")
 catalogue_id = os.getenv("YA_CATALOG_ID")
 
-# with open('prompts/base_instruct.xml') as inst:
-#     BASE_INSTRUCTIONS = inst.read()
-#
-# messages = [
-#     {
-#         "role": "system",
-#         "text": BASE_INSTRUCTIONS,
-#     },
-#     {
-#         "role": "user",
-#         "text": "В каком рейтинге (по состоянию на 2021 год) ИТМО впервые вошёл в топ-400 мировых университетов?\n1. ARWU (Shanghai Ranking)\n2. Times Higher Education (THE) World University Rankings\n3. QS World University Rankings\n4. U.S. News & World Report Best Global Universities",
-#     },
-# ]
-messages = chat_history
+with open('../prompts/base_instruct.xml') as inst:
+    BASE_INSTRUCTIONS = inst.read()
+
+messages = [
+    {
+        "role": "system",
+        "text": BASE_INSTRUCTIONS,
+    },
+    {
+        "role": "user",
+        "text": "В каком году Университет ИТМО был включён в число Национальных исследовательских университетов России?\n1. 2007\n2. 2009\n3. 2011\n4. 2015",
+    },
+]
+# messages = chat_history
 
 sdk = YCloudML(
     folder_id=catalogue_id,
@@ -35,11 +35,12 @@ sdk = YCloudML(
 
 def main():
     model = sdk.models.completions("yandexgpt")
-    model = model.configure(temperature=0.5)
+    model = model.configure(temperature=0.8)
     result = model.run(messages)
 
     for alternative in result:
         print(alternative.text)
+
 
 """
 V0: MVP

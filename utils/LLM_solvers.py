@@ -1,12 +1,15 @@
 import json
 from abc import ABC, abstractmethod
-from typing import List, Tuple
+from typing import List
 
 from pydantic import BaseModel, Field, PrivateAttr, HttpUrl
 from yandex_cloud_ml_sdk import YCloudML
 from yandex_cloud_ml_sdk._models import Models
 
 from schemas.request import PredictionResponse
+from search import search
+from utils.exceptions import LLMWorkflowError
+from utils.scraps.scrape.dumb import bounds_based_parse, summarize_text
 
 with open('prompts/base_instruct.xml') as base_instructions:
     BASE_INSTRUCTIONS = base_instructions.read()
@@ -47,37 +50,54 @@ class AbstractPredictionResponse(BaseModel, ABC):
 class YaGPTResponse(AbstractPredictionResponse):
     sdk: YCloudML = Field(..., description="YaGPT SDK with credentials")
     temperature: float = Field(default=0.5, description="LLM temperature")
+    search_api_key: str = Field(..., description="Yandex search API key")
 
-    _sources_links: List[HttpUrl] = PrivateAttr()
+    _sources_links: List[str] = PrivateAttr()
+    _error_handler_prompt = [
+        {
+            "role": "system",
+            "text": """I have a pseudo-json somewhere in the following text. Respond with a valid json from there. 
+            use the following schema: {"query": "string"}""",
+        }
+    ]
 
     def answer(self) -> PredictionResponse:
-        ya_gpt = self.sdk.models.completions('yandexgpt')
-
+        # models
+        ya_gpt = self.sdk.models.completions('yandexgpt').configure(temperature=self.temperature, max_tokens=32000)
         error_handler = self.sdk.models.completions('yandexgpt-lite')
 
-        ya_gpt.configure(temperature=self.temperature, max_tokens=2000)
-        request_term = None
+        # 1 step: get data sources
+        dirty_data_request = self.__get_initial_data_request(ya_gpt)
+        query_string = self.__handle_invalid_format(dirty_data_request, error_handler)
 
-        try:
-            _, dirty_request = self.__get_initial_data_request(ya_gpt)
-            request_term = json.loads(dirty_request.strip())['query']
-        except json.decoder.JSONDecodeError as e:
-            print('Error parsing json')
-            cap = 5
-            counter = 0
-            while not request_term and counter < cap:
-                print(f'Entered fixing loop {counter}')
-                counter += 1
-                fixer_instructions = f"Here is an invalid json schema with json validator error. Return a repaired json object instead.\n{dirty_request}\n{e}"
-                try:
-                    dirty_request = error_handler.run(fixer_instructions)
-                    request_term = json.loads(dirty_request.strip())['query']
-                except json.decoder.JSONDecodeError as e:
-                    continue
-        except ValueError as e:
-            print(e)
+        print(query_string)
 
-        print(request_term)
+        self._sources_links = search(query_string,
+                                     folder_id=self.sdk._folder_id,
+                                     api_key=self.search_api_key)[:5]
+
+        # 2 step: scrape data from sources
+        # TODO update to be async
+        scraped_data = {}
+
+        print('scraping...')
+        for i in self._sources_links:
+            print('scraping', i)
+            if attempt := summarize_text(i, sdk, self.question):
+                scraped_data[i] = attempt
+        after_search_instructions = AFTER_SEARCH_TEMPLATE.replace('{{ question_text }}', question)
+
+        self._messages = [{
+            "role": "system",
+            'text': f"{after_search_instructions}\n",
+        }, {
+            "role": 'user',
+            "text": f"# Факты и источники\n{scraped_data}"
+        }]
+
+        # 3 step: get final answer
+        print('final elaborations\n\n___\n')
+        print(ya_gpt.run(self._messages))
 
         return PredictionResponse(
             id=self.query_id,
@@ -86,12 +106,40 @@ class YaGPTResponse(AbstractPredictionResponse):
             sources=[HttpUrl('https://google.com')],
         )
 
-    def __get_initial_data_request(self, model: Models) -> Tuple[str, str]:
+    def __get_initial_data_request(self, model: Models) -> str:
         model_response = model.run(self._messages)
+        self._messages.append({
+            'role': 'system',
+            'text': model_response[0].text,
+        })
 
         print(model_response[0].text)
 
-        return model_response[0].text.strip().split('---')
+        return model_response[0].text
+
+    @staticmethod
+    def __handle_invalid_format(response: str, error_handler: Models) -> str:
+        # 1 step: try naive approaches to extract json
+        try:
+            _, dirty_schema = response.split('---')
+        except ValueError:
+            guess_start = response.rfind('{')
+            if guess_start == -1:
+                dirty_schema = ''
+            else:
+                dirty_schema = response[guess_start:]
+
+        # step 2: mix in a light llm to fix it for us
+        if not dirty_schema:
+            model_response = error_handler.run(response)
+            dirty_schema = model_response[0].text
+
+        # step 3: convert the possible text into a valid json, else restart the process
+        try:
+            json_object = json.loads(dirty_schema)
+            return json_object['query']
+        except json.decoder.JSONDecodeError:
+            raise LLMWorkflowError('Failed to create a valid request')
 
 
 if __name__ == '__main__':
@@ -114,17 +162,19 @@ if __name__ == '__main__':
 
     load_dotenv()
 
-    api_key = os.getenv("YA_GPT_KEY")
     catalogue_id = os.getenv("YA_CATALOG_ID")
+    gpt_api_key = os.getenv("YA_GPT_KEY")
+    search_api_key = os.getenv("YA_SEARCH_KEY")
 
     sdk = YCloudML(
         folder_id=catalogue_id,
-        auth=api_key,
+        auth=gpt_api_key,
     )
-    question = "В каком году Университет ИТМО был включён в число Национальных исследовательских университетов России?\n1. 2007\n2. 2009\n3. 2011\n4. 2015"
+    question = "Сколько человек обучается итмо в 2021 году?\n1. 1500\n2. 14000\n3. 50000\n4. 19000"
 
     predictor = YaGPTResponse(query_id=1,
                               question=question,
                               sdk=sdk,
-                              temperature=0.3)
+                              temperature=0.5,
+                              search_api_key=search_api_key, )
     predictor.answer()
