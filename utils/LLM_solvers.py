@@ -93,7 +93,7 @@ class YaGPTResponse(AbstractPredictionResponse):
 
         if type(answer) == str and answer.isalnum():
             answer = int(answer)
-        else:
+        if type(answer) != int:
             answer = -1
 
         return PredictionResponse(
