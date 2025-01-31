@@ -34,3 +34,11 @@ Content-Type: application/json
   "id": 4
 }
 
+### remote test
+POST http://oopyat.duckdns.org/api/request
+Content-Type: application/json
+
+{
+  "query": "В каком городе находится главный кампус Университета ИТМО?\n1. Москва\n2. Санкт-Петербург\n3. Екатеринбург\n4. Нижний Новгород",
+  "id": 1
+}
