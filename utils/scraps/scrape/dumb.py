@@ -44,7 +44,7 @@ def extract_surrounding(source, indexes, bound=100):
     while indexes:
         center = indexes.pop(0)
         start, end = max(0, center - bound), min(len(source), center + bound)
-        while indexes and indexes[0] < end:
+        while indexes and indexes[0] - (2 * bound) < end:
             center = indexes.pop(0)
             end = min(len(source), center + bound)
         result.append(source[start:end])
@@ -57,5 +57,8 @@ def bounds_based_parse(url, bound=100):
     surrounding = extract_surrounding(data, indexes, bound)
     return surrounding
 
+
 if __name__ == '__main__':
-    print(bounds_based_parse("https://news.itmo.ru/ru/university_live/ratings/news/10169/?ysclid=m6jhm4vgmu584156611", 100))
+    print(bounds_based_parse(
+        "https://ru.wikipedia.org/wiki/%D0%A3%D0%BD%D0%B8%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%82%D0%B5%D1%82_%D0%98%D0%A2%D0%9C%D0%9E",
+        100))

@@ -3,10 +3,10 @@ from utils.scraps.scrape.dumb import bounds_based_parse
 
 question = "В каком рейтинге (по состоянию на 2021 год) ИТМО впервые вошёл в топ-400 мировых университетов?\n1. ARWU (Shanghai Ranking)\n2. Times Higher Education (THE) World University Rankings\n3. QS World University Rankings\n4. U.S. News & World Report Best Global Universities"
 
-with open('prompts/base_instruct.xml') as inst:
+with open('../prompts/base_instruct.xml') as inst:
     BASE_INSTRUCTIONS = inst.read()
 
-with open('prompts/after_search_instruct.xml') as after_search:
+with open('../prompts/after_search_instruct.xml') as after_search:
     AFTER_SEARCH_TEMPLATE = after_search.read()
 
 sources = [
