@@ -42,3 +42,12 @@ Content-Type: application/json
   "query": "В каком городе находится главный кампус Университета ИТМО?\n1. Москва\n2. Санкт-Петербург\n3. Екатеринбург\n4. Нижний Новгород",
   "id": 1
 }
+
+###
+POST http://oopyat.duckdns.org/api/request
+Content-Type: application/json
+
+{
+  "query": "Сколько образовательных программ в бакалавриате ИТМО?\n1. 26\n2. 12\n3. 100\n4. 20",
+  "id": 4
+}

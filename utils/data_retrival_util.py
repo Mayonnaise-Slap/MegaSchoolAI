@@ -1,11 +1,14 @@
 import asyncio
+from typing import List, Dict
+
 import aiohttp
 from bs4 import BeautifulSoup
 from yandex_cloud_ml_sdk import YCloudML
 
 
 async def dumb_parse(url: str) -> str:
-    """Asynchronously fetches and parses webpage content into plain text."""
+    """Асинхронно запрашивает html страницы и
+    парсит его в блок текста"""
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, timeout=10) as response:
@@ -13,7 +16,6 @@ async def dumb_parse(url: str) -> str:
                     return ""
                 content = await response.text(errors='replace')
     except asyncio.TimeoutError:
-        # print(f'Timed out: {url}')
         return ''
 
     return BeautifulSoup(content, 'html.parser').get_text(' ', strip=True).lower()
@@ -43,7 +45,8 @@ def find_all(a_str, sub):
         start += len(sub)
 
 
-def extract_surrounding(source, indexes, bound=100):
+def extract_surrounding(source: str, indexes: List[int], bound=100) -> str:
+    """Извлекает подстроки вокруг слов итмо"""
     result = []
     while indexes:
         center = indexes.pop(0)
@@ -55,7 +58,13 @@ def extract_surrounding(source, indexes, bound=100):
     return '\n'.join(result)
 
 
-async def bounds_based_parse(url, bound=100):
+async def bounds_based_parse(url: str, bound: int = 100) -> str:
+    """
+    Наивный подход для извлечения контекстных данных:
+    берет 2 * bound символов вокруг слов итмо и itmo
+    и возвращает одним текстовым блоком. Для классического
+    nlp еще бы нормализовать, но llm не очень такое любит
+    """
     data = await dumb_parse(url)
     indexes = merge_sorted_indexes(list(find_all(data, 'итмо')), list(find_all(data, 'itmo')))
     surrounding = extract_surrounding(data, indexes, bound)
@@ -63,6 +72,10 @@ async def bounds_based_parse(url, bound=100):
 
 
 async def summarize_text(url: str, sdk, context: str) -> str:
+    """
+    Функция берет дамп текста со страницы и отправляет его в llm для
+    суммаризации / извлечения фактов
+    """
     data = await bounds_based_parse(url)
     if not data:
         return ""
@@ -82,29 +95,11 @@ async def summarize_text(url: str, sdk, context: str) -> str:
     text = summarizer.run(messages)[0].text
     return text
 
-async def process_all_sources(sources, sdk, question):
-    """Runs `summarize_text` concurrently for multiple sources."""
-    tasks = [summarize_text(url, sdk, question) for url in sources]
-    results = await asyncio.gather(*tasks)
-    return {url: result for url, result in zip(sources, results)}
 
-
-if __name__ == '__main__':
-    sources = ["https://itmo.ru/", "https://itmo.ru/ru/page/207/ob_universitete.htm", "https://ru.wikipedia.org/wiki/%D0%A3%D0%BD%D0%B8%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%82%D0%B5%D1%82_%D0%98%D0%A2%D0%9C%D0%9E"]
-    import os
-
-    from dotenv import load_dotenv
-
-    load_dotenv()
-
-    catalogue_id = os.getenv("YA_CATALOG_ID")
-    gpt_api_key = os.getenv("YA_GPT_KEY")
-    search_api_key = os.getenv("YA_SEARCH_KEY")
-
-    sdk = YCloudML(
-        folder_id=catalogue_id,
-        auth=gpt_api_key,
-    )
-    question = "Сколько человек обучается итмо в 2021 году?\n1. 1500\n2. 14000\n3. 50000\n4. 19000"
-    results = asyncio.run(process_all_sources(sources, sdk, question))
-    # print(results)
+async def process_all_sources(sources: List[str], sdk: YCloudML, question_context: str) -> Dict[str, str]:
+    """
+    Асинхронная функция для асинхронного скрейпинга и суммаризации веб страниц
+    """
+    tasks = [summarize_text(url, sdk, question_context) for url in sources]
+    summarizations = await asyncio.gather(*tasks)
+    return {url: result for url, result in zip(sources, summarizations)}

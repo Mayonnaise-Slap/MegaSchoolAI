@@ -9,9 +9,9 @@ from yandex_cloud_ml_sdk._models import Models
 
 from schemas.request import PredictionResponse
 from utils.cleanup import get_cleanup_prompt
-from .data_retrival_util import process_all_sources
-from .exceptions import LLMWorkflowError
-from .search import get_search_urls
+from utils.data_retrival_util import process_all_sources
+from utils.exceptions import LLMWorkflowError
+from utils.search import get_search_urls
 
 
 with open('utils/prompts/base_instruct.xml') as base_instructions:
@@ -47,7 +47,7 @@ class AbstractPredictionResponse(BaseModel, ABC):
         pass
 
     class Config:
-        arbitrary_types_allowed = True
+        arbitrary_types_allowed = True  # для удовлетворения lsp PyCharm'а
 
 
 class YaGPTResponse(AbstractPredictionResponse):
@@ -58,6 +58,9 @@ class YaGPTResponse(AbstractPredictionResponse):
     _sources_links: List[str] = PrivateAttr()
 
     async def answer(self) -> PredictionResponse:
+        """
+        Точка входа в workflow, отсюда класс управляет собой сам
+        """
         # models
         ya_gpt = self.sdk.models.completions('yandexgpt-lite').configure(temperature=self.temperature, max_tokens=32000)
         error_handler = self.sdk.models.completions('yandexgpt-lite')
@@ -73,7 +76,6 @@ class YaGPTResponse(AbstractPredictionResponse):
         # 2 step: scrape data from sources
         future = asyncio.create_task(process_all_sources(self._sources_links, self.sdk, self.question))
         scraped_data = await future
-        # print(scraped_data)
         after_search_instructions = AFTER_SEARCH_TEMPLATE.replace('{{ question_text }}', self.question)
 
         self._messages = [{
@@ -87,24 +89,36 @@ class YaGPTResponse(AbstractPredictionResponse):
         # 3 step: get final answer
         dirty_response = ya_gpt.run(self._messages)[0].text
         clean_response = self.__parse_invalid_final_response(dirty_response, error_handler)
+        answer = clean_response['answer']
+
+        if type(answer) == str and answer.isalnum():
+            answer = int(answer)
+        else:
+            answer = -1
 
         return PredictionResponse(
             id=self.query_id,
-            answer=clean_response['answer'] if type(clean_response['answer']) == int else -1,
+            answer=answer,
             reasoning=clean_response['reasoning'],
             sources=clean_response['sources'][:3],
         )
 
     def __get_initial_data_request(self, model: BaseModel) -> str:
+        """
+        Приватная функция, получает из llm запрос на данные в поисковике
+        """
         model_response = model.run(self._messages)
         self._messages.append({
-            'role': 'system',
+            'role': 'assistant',
             'text': model_response[0].text,
         })
 
         return model_response[0].text
 
     def __handle_invalid_format(self, response: str, error_handler: Models) -> str:
+        """
+        Приватная функция для извлечения поискового запроса из ответа llm
+        """
         # 1 step: try naive approaches to extract json
         try:
             _, dirty_schema = response.split('---')
@@ -137,6 +151,9 @@ class YaGPTResponse(AbstractPredictionResponse):
             raise LLMWorkflowError('Failed to create a valid request')
 
     def __parse_invalid_final_response(self, response: str, error_handler: Models) -> Dict[str, Union[str, List[str]]]:
+        """
+        Приватная функция для парсинга вывода workflow в валидную json схему
+        """
         # 1 step: try naive approaches to extract json
         try:
             _, dirty_schema = response.split('---')
@@ -167,41 +184,3 @@ class YaGPTResponse(AbstractPredictionResponse):
             return json.loads(dirty_schema)
         except json.decoder.JSONDecodeError:
             raise LLMWorkflowError('Failed to create a valid request')
-
-
-async def main():
-    import os
-
-    from dotenv import load_dotenv
-
-    load_dotenv()
-
-    catalogue_id = os.getenv("YA_CATALOG_ID")
-    gpt_api_key = os.getenv("YA_GPT_KEY")
-    search_api_key = os.getenv("YA_SEARCH_KEY")
-
-    sdk = YCloudML(
-        folder_id=catalogue_id,
-        auth=gpt_api_key,
-    )
-    question = "Сколько человек обучается в итмо?\n1. Москва\n2. 1900\n3. 16000\n4. 25000"
-
-    predictor = YaGPTResponse(query_id=1,
-                              question=question,
-                              sdk=sdk,
-                              temperature=0.5,
-                              search_api_key=search_api_key, )
-    res = await predictor.answer()
-    print(res)
-
-
-if __name__ == '__main__':
-    """
-    V1: костыль
-    Текущее состояние:
-    обертка для подходов из mvp с очень грубой реализацией. 
-    
-    Варианты улучшения:
-    Подключить нормальную агентную логику или RAG
-    """
-    asyncio.run(main())

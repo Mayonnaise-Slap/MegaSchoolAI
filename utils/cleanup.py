@@ -1,4 +1,12 @@
-def get_cleanup_prompt(schema, dirty_text):
+from typing import List, Dict
+
+
+def get_cleanup_prompt(schema: str, dirty_text: str) -> List[Dict[str, str]]:
+    """
+    Создает промпт для вспомогательной модели, которая должна
+    очистить входные данные, если их не получилось разделить
+    программатически
+    """
     return [
         {
             "role": "system",

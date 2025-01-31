@@ -1,10 +1,5 @@
-import asyncio
-import json
-
-import httpx
-import requests
-
-API_URL = 'http://localhost:8080/api/request'
+LOCAL_API_URL = 'http://localhost:8080/api/request'
+REMOTE_API_URL = 'http://oopyat.duckdns.org/api/request'
 
 test_cases = [
     {
@@ -22,43 +17,23 @@ test_cases = [
     {
         "question": "Какого факультета нет в итмо?\n1. Физико-технический мегафакультет\n2. Мегафакультет наук о жизни\n3. Факультет систем управления и робототехники\n4. Факультет экономики и финансов",
         "answer": 4},
+    {'question': "В каком году был основан ИТМО\n1. 1900\n2. 1942\n3. 1820\n4. 2009", "answer": 1},
+    {'question': "В каком году инициировали проект ИТМО ХАЙПАРК\n1. 2017\n2. 2020\n3. 2024\n4. 2009", "answer": 1},
+    {
+        'question': "Какой девиз университета ИТМО?\n1. IT's MOre than a UNIVERSITY!\n2. Выбирай итмо или не выбирай вообще\n3. Институт теплых мужских отношений\n4. Лучший вуз АЙТИ в россии",
+        "answer": 1},
+    {
+        'question': "Кто главный маскот университета ИТМО?\n1. Снежный барс Тим\n2. Пума Клара\n3. Снежный барс Макс\n4. Даша путешественница",
+        "answer": 1},
+    {
+        'question': "Сколько раз команда Университета ИТМО выигрывала Международную студенческую олимпиаду по программированию ACM ICPC?\n1. Пять\n2. шесть\n3. 7\n4. Восемь",
+        "answer": 3},
+    {'question': "В каком году Университет ИТМО впервые победил в ACM ICPC?\n1. 2000\n2. 2004\n3. 2008\n4. 2012",
+     "answer": 2},
+    {
+        'question': "Какой язык программирования был создан выпускниками Университета ИТМО?\n1. Kotlin\n2. C\n3. Go\n4. Swift",
+        "answer": 1},
+    {
+        'question': "Как называется проект по созданию нового кампуса Университета ИТМО на юге Санкт-Петербурга?\n1. ИТМО Хайпарк\n2. ИТМО Парк\n3. ИТМО сити\n4. ИТМО Центр",
+        "answer": 1},
 ]
-
-
-async def send_request(session, data, request_id):
-    """Sends an async request to the Flask app."""
-    payload = json.dumps({"id": request_id, "query": data}, ensure_ascii=False).encode("utf-8")
-    try:
-        response = await session.post(API_URL, data=payload, timeout=20)
-    except Exception as e:
-        print(f"Request {request_id} failed: {str(e)}")
-    finally:
-        print(f"Response {request_id}: {response.status_code} - {response.text}")
-
-
-async def test_concurrent_requests():
-    """Sends 5 concurrent requests to the Flask API."""
-
-    async with httpx.AsyncClient() as session:
-        tasks = [send_request(session, test_cases[i]["question"], i) for i in range(5)]
-        await asyncio.gather(*tasks)
-
-
-def sync_test():
-    successes = 0
-    for i, val in enumerate(test_cases[:5]):
-        payload = json.dumps({"query": val["question"], 'id': i}, ensure_ascii=False).encode("utf-8")
-        resource = requests.post(API_URL, data=payload)
-        if resource.status_code == 200 and val["answer"] == resource.json()['answer']:
-            successes += 1
-            print(f"Success: {i} - {resource.text}")
-        else:
-            print(f"Failure: {i} - {resource.text}")
-
-
-
-
-# Run the test
-if __name__ == '__main__':
-    asyncio.run(test_concurrent_requests())
-    # sync_test()
