@@ -1,14 +1,25 @@
+import os
 import time
-from typing import List
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request, Response
-from pydantic import HttpUrl
+from fastapi.exceptions import ValidationException
+from yandex_cloud_ml_sdk import YCloudML
+
 from schemas.request import PredictionRequest, PredictionResponse
+from utils.LLM_solvers import YaGPTResponse
+from utils.exceptions import LLMWorkflowError
 from utils.logger import setup_logger
 
 # Initialize
 app = FastAPI()
 logger = setup_logger()
+
+load_dotenv()
+
+catalogue_id = os.getenv("YA_CATALOG_ID")
+gpt_api_key = os.getenv("YA_GPT_KEY")
+search_api_key = os.getenv("YA_SEARCH_KEY")
 
 
 @app.on_event("startup")
@@ -53,25 +64,31 @@ async def log_requests(request: Request, call_next):
 async def predict(body: PredictionRequest):
     try:
         await logger.info(f"Processing prediction request with id: {body.id}")
-        # Здесь будет вызов вашей модели
-        answer = 1  # Замените на реальный вызов модели
-        sources: List[HttpUrl] = [
-            HttpUrl("https://itmo.ru/ru/"),
-            HttpUrl("https://abit.itmo.ru/"),
-        ]
 
-        response = PredictionResponse(
-            id=body.id,
-            answer=answer,
-            reasoning="Из информации на сайте",
-            sources=sources,
+        sdk = YCloudML(
+            folder_id=catalogue_id,
+            auth=gpt_api_key,
         )
-        await logger.info(f"Successfully processed request {body.id}")
-        return response
-    except ValueError as e:
-        error_msg = str(e)
-        await logger.error(f"Validation error for request {body.id}: {error_msg}")
-        raise HTTPException(status_code=400, detail=error_msg)
+
+        for i in range(5):
+            try:
+                predictor = YaGPTResponse(query_id=body.id,
+                                          question=body.query,
+                                          sdk=sdk,
+                                          temperature=0.3,
+                                          search_api_key=search_api_key, )
+                answer = await predictor.answer()
+                await logger.info(f"Successfully processed request {body.id}")
+                break
+            except LLMWorkflowError as e:
+                await logger.error(f"LLM workflow failed for request {body.id}: {e}, retrying {i + 1}")
+                continue
+            except ValueError as e:
+                await logger.error(f'LLM generated fake answer with invalid answer for request {body.id}: {e},  retrying {i + 1}')
+        return answer
+    except LLMWorkflowError as e:
+        await logger.error(f"LLM workflow failed for request {body.id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         await logger.error(f"Internal error processing request {body.id}: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")

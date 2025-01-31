@@ -24,5 +24,5 @@ def parse_search(response_text: str) -> List[str]:
     return urls
 
 
-def search(query: str, folder_id: str, api_key: str) -> List[str]:
+def get_search_urls(query: str, folder_id: str, api_key: str) -> List[str]:
     return parse_search(perform_search(query, folder_id, api_key))
