@@ -30,9 +30,10 @@ async def send_request(session, data, request_id):
     payload = json.dumps({"id": request_id, "query": data}, ensure_ascii=False).encode("utf-8")
     try:
         response = await session.post(API_URL, data=payload, timeout=20)
-        print(f"Response {request_id}: {response.status_code} - {response.text}")
     except Exception as e:
-        print(f"Request {request_id} failed: {e}")
+        print(f"Request {request_id} failed: {str(e)}")
+    finally:
+        print(f"Response {request_id}: {response.status_code} - {response.text}")
 
 
 async def test_concurrent_requests():

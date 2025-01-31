@@ -13,11 +13,7 @@ from .data_retrival_util import process_all_sources
 from .exceptions import LLMWorkflowError
 from .search import get_search_urls
 
-# with open('prompts/base_instruct.xml') as base_instructions:
-#     BASE_INSTRUCTIONS = base_instructions.read()
-#
-# with open('prompts/after_search_instruct.xml') as after_search_instructions:
-#     AFTER_SEARCH_TEMPLATE = after_search_instructions.read()
+
 with open('utils/prompts/base_instruct.xml') as base_instructions:
     BASE_INSTRUCTIONS = base_instructions.read()
 
